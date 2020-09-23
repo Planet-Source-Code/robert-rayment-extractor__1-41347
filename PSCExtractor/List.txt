@@ -1,0 +1,193 @@
+     1                                  ;Extract.asm  by Robert Rayment  Nov 2002
+     2                                  
+     3                                  ; ASM layout done to roughly match VB layout
+     4                                  
+     5                                  ; VB
+     6                                  ; Public ptrMC, ptrStruc    ' Ptrs to Machine Code & Structure
+     7                                  ; 'MCode Structure
+     8                                  ; Public Type PStruc
+     9                                  ;   picWd As Long
+    10                                  ;   picHt As Long
+    11                                  ;   Ptrpic1mem As Long      ' pic1mem(1-4,1-picWd,1-picHt) bytes
+    12                                  ;   Ptrpic2mem As Long      ' pic2mem(1-4,1-picWd,1-picHt) bytes
+    13                                  ;   StartColor As Long
+    14                                  ;   PtrDELRGB As Long       ' DELRGB(0,1,2,3) Grey, +/1 R,G,B
+    15                                  ; End Type
+    16                                  ; Public DStruc As PStruc
+    17                                  ; EG
+    18                                  ; Public ExtractMC() As Byte
+    19                                  ; Public Sub ASM_Extract()
+    20                                  ; res = CallWindowProc(ptrMC, ptrStruc, 2&, 3&, 4&)
+    21                                  ;                             8         12  16  20
+    22                                  ; End Sub
+    23                                  
+    24                                  %macro movab 2      ;name & num of parameters
+    25                                    push dword %2     ;2nd param
+    26                                    pop dword %1      ;1st param
+    27                                  %endmacro           ;use  movab %1,%2
+    28                                  ;Allows eg  movab bmW,[ebx+4]
+    29                                  
+    30                                  ;Define names to match VB code
+    31                                  %define picWd          [ebp-4]
+    32                                  %define picHt          [ebp-8]
+    33                                  %define Ptrpic1mem     [ebp-12]
+    34                                  %define Ptrpic2mem     [ebp-16]
+    35                                  %define StartColor     [ebp-20]
+    36                                  %define PtrDELRGB      [ebp-24]
+    37                                  
+    38                                  ; Some variables
+    39                                  %define R1         [ebp-28]
+    40                                  %define G1         [ebp-32]
+    41                                  %define B1         [ebp-36]
+    42                                  %define R          [ebp-52]
+    43                                  %define G          [ebp-56]
+    44                                  %define B          [ebp-60]
+    45                                  %define R1minus    [ebp-64]    
+    46                                  %define G1minus    [ebp-68]    
+    47                                  %define B1minus    [ebp-72]    
+    48                                  %define R1plus     [ebp-76]    
+    49                                  %define G1plus     [ebp-80]    
+    50                                  %define B1plus     [ebp-84]
+    51                                  
+    52                                  [bits 32]
+    53                                  
+    54 00000000 55                          push ebp
+    55 00000001 89E5                        mov ebp,esp
+    56 00000003 81EC54000000                sub esp,84
+    57 00000009 57                          push edi
+    58 0000000A 56                          push esi
+    59 0000000B 53                          push ebx
+    60                                  
+    61                                      ;Fill structure
+    62 0000000C 8B5D08                      mov ebx,            [ebp+8]
+    63                                      movab picWd,        [ebx]
+    64 0000000F FF33                <1>   push dword %2
+    65 00000011 8F45FC              <1>   pop dword %1
+    66                                      movab picHt,        [ebx+4]
+    67 00000014 FF7304              <1>   push dword %2
+    68 00000017 8F45F8              <1>   pop dword %1
+    69                                      movab Ptrpic1mem,   [ebx+8]
+    70 0000001A FF7308              <1>   push dword %2
+    71 0000001D 8F45F4              <1>   pop dword %1
+    72                                      movab Ptrpic2mem,   [ebx+12]
+    73 00000020 FF730C              <1>   push dword %2
+    74 00000023 8F45F0              <1>   pop dword %1
+    75                                      movab StartColor,   [ebx+16]
+    76 00000026 FF7310              <1>   push dword %2
+    77 00000029 8F45EC              <1>   pop dword %1
+    78                                      movab PtrDELRGB,    [ebx+20]
+    79 0000002C FF7314              <1>   push dword %2
+    80 0000002F 8F45E8              <1>   pop dword %1
+    81                                  ;----------------------------
+    82                                  
+    83                                  ;   Get R1,G1,B1 from StartColor
+    84 00000032 31C0                        xor eax,eax
+    85 00000034 8945E4                      mov R1,eax
+    86 00000037 8945E0                      mov G1,eax
+    87 0000003A 8945DC                      mov B1,eax
+    88 0000003D 8B45EC                      mov eax,StartColor
+    89 00000040 8845E4                      mov R1,AL
+    90 00000043 8865E0                      mov G1,AH
+    91 00000046 0FC8                        bswap eax
+    92 00000048 8865DC                      mov B1,AH
+    93                                  
+    94                                  ;   Get R1minus/plus,G1minus/plus,B1minus/plus
+    95                                      
+    96 0000004B 8B7DE8                      mov edi,PtrDELRGB
+    97                                  
+    98 0000004E 8B45E4                      mov eax,R1
+    99 00000051 8B5F04                      mov ebx,[edi+4] ; DELRGB(1) +/- red
+   100 00000054 29D8                        sub eax,ebx     ; R1-DELRGB(1)
+   101 00000056 8945C0                      mov R1minus,eax
+   102 00000059 01D8                        add eax,ebx
+   103 0000005B 01D8                        add eax,ebx
+   104 0000005D 8945B4                      mov R1plus,eax      ; R1+DELRGB(1)
+   105                                  
+   106 00000060 8B45E0                      mov eax,G1
+   107 00000063 8B5F08                      mov ebx,[edi+8] ; DELRGB(2) +/- green
+   108 00000066 29D8                        sub eax,ebx     ; G1-DELRGB(2)
+   109 00000068 8945BC                      mov G1minus,eax
+   110 0000006B 01D8                        add eax,ebx
+   111 0000006D 01D8                        add eax,ebx
+   112 0000006F 8945B0                      mov G1plus,eax      ; G1+DELRGB(2)
+   113                                  
+   114 00000072 8B45DC                      mov eax,B1
+   115 00000075 8B5F0C                      mov ebx,[edi+12]    ; DELRGB(3) +/- blue
+   116 00000078 29D8                        sub eax,ebx     ; B1-DELRGB(3)
+   117 0000007A 8945B8                      mov B1minus,eax
+   118 0000007D 01D8                        add eax,ebx
+   119 0000007F 01D8                        add eax,ebx
+   120 00000081 8945AC                      mov B1plus,eax      ; B1+DELRGB(3)
+   121                                  
+   122                                  
+   123                                  ;   Test each pixel's RGB against 
+   124                                  ;   R1,G1,B1 +/-  DELRGB(1,2,3)
+   125                                  
+   126 00000084 8B45F8                      mov eax,picHt
+   127 00000087 8B5DFC                      mov ebx,picWd
+   128 0000008A F7E3                        mul ebx
+   129 0000008C 89C1                        mov ecx,eax         ; picHt*picWd no. of 4-bytes chunks 
+   130                                                          ; in pic1mem & pic2mem
+   131                                      
+   132 0000008E 8B75F4                      mov esi,Ptrpic1mem  ; esi->pic1mem(1,1,1)
+   133 00000091 8B7DF0                      mov edi,Ptrpic2mem  ; edi->pic2mem(1,1,1)
+   134                                  
+   135                                  ForChunk:
+   136                                  
+   137 00000094 31C0                        xor eax,eax
+   138 00000096 8945CC                      mov R,eax
+   139 00000099 8945C8                      mov G,eax
+   140 0000009C 8945C4                      mov B,eax
+   141                                  
+   142 0000009F 8B06                        mov eax,[esi]       ; Lo-BGRA-Hi 32bit order in pic1mem
+   143 000000A1 8845C4                      mov B,AL
+   144 000000A4 8865C8                      mov G,AH
+   145 000000A7 0FC8                        bswap eax
+   146 000000A9 8865CC                      mov R,AH
+   147                                  
+   148                                      ; TestR
+   149 000000AC 8B45CC                      mov eax,R
+   150 000000AF 3B45C0                      cmp eax,R1minus
+   151 000000B2 7C29                        jl Blacken
+   152 000000B4 3B45B4                      cmp eax,R1plus
+   153 000000B7 7F24                        jg Blacken
+   154                                  
+   155                                      ; TestG
+   156 000000B9 8B45C8                      mov eax,G
+   157 000000BC 3B45BC                      cmp eax,G1minus
+   158 000000BF 7C1C                        jl Blacken
+   159 000000C1 3B45B0                      cmp eax,G1plus
+   160 000000C4 7F17                        jg Blacken
+   161                                  
+   162                                      ; TestB
+   163 000000C6 8B45C4                      mov eax,B
+   164 000000C9 3B45B8                      cmp eax,B1minus
+   165 000000CC 7C0F                        jl Blacken
+   166 000000CE 3B45AC                      cmp eax,B1plus
+   167 000000D1 7F0A                        jg Blacken
+   168                                  
+   169                                      ; Whiten
+   170 000000D3 B8FFFFFF00                  mov eax,0FFFFFFh
+   171 000000D8 E902000000                  jmp FillPic2mem
+   172                                  Blacken:
+   173 000000DD 31C0                        xor eax,eax
+   174                                  FillPic2mem:
+   175 000000DF 8907                        mov [edi],eax
+   176                                  
+   177                                  NexChunk:
+   178 000000E1 B804000000                  mov eax,4
+   179 000000E6 01C6                        add esi,eax
+   180 000000E8 01C7                        add edi,eax
+   181 000000EA 49                          dec ecx
+   182 000000EB 75A7                        jnz ForChunk
+   183                                  
+   184                                  
+   185                                  GETOUT:
+   186 000000ED 5B                          pop ebx
+   187 000000EE 5E                          pop esi
+   188 000000EF 5F                          pop edi
+   189 000000F0 89EC                        mov esp,ebp
+   190 000000F2 5D                          pop ebp
+   191 000000F3 C21000                      ret 16
+   192                                  
+   193                                  ;=====================================================================
